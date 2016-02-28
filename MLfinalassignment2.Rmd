@@ -1,0 +1,82 @@
+---
+title: "ML Final assignment"
+output: html_document
+---
+
+Import data set and convert factor variables to numeric
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
+library(caret,quietly = TRUE,warn.conflicts = FALSE)
+library(gbm,quietly = TRUE,warn.conflicts = FALSE)
+library(rpart,quietly = TRUE,warn.conflicts = FALSE)
+library(rpart.plot,quietly = TRUE,warn.conflicts = FALSE)
+
+pml.training <- read.csv("pml-training.csv")
+pml.testing <- read.csv("pml-testing.csv", header=TRUE)
+for (i in names(pml.training)[8:(length(pml.training)-1)]) {
+    pml.training[[i]] <- as.numeric(as.character(pml.training[,i]))
+}
+
+```
+
+Choose NA columns and store not NA columns in variable isnacolumn
+
+Make sample data sets named "training" and "testing" without them
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+set.seed(1000)
+isnacolumn<-sapply(pml.training, function(x){sum(is.na(x))<length(x)*0.1}) & 
+    c(rep(FALSE,5),rep(TRUE,length(pml.training)-5))
+inTrain <- createDataPartition(pml.training$classe, p = 3/4)[[1]]
+training<-pml.training[inTrain,isnacolumn]
+testing<-pml.training[-inTrain,isnacolumn]
+```
+
+First we use CART method
+
+#CART method
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+fit<-train(classe~.,data=training,method="rpart")
+confusionMatrix(testing$classe,predict(fit,testing))
+prp(fit$finalModel)
+
+```
+
+Accuracy 0.57 is too small to stop finding
+
+let's try to use GBM. We shall use PCA to reduce number of variables
+
+#Gradient boosting mashine with PCA veriables reducing
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+set.seed(1000)
+ctrl<-trainControl(verboseIter = FALSE,allowParallel = TRUE)
+fit<-train(classe~.,data=training,method="gbm",preProcess = "pca", trControl=ctrl,verbose=FALSE)
+confusionMatrix(testing$classe,predict(fit,testing))
+summary(fit)
+```
+
+Accuracy of 0.83 is good, but let's try do not use PCA
+
+#Gradient boosting mashine without PCA veriables reducing
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+set.seed(1000)
+ctrl<-trainControl(verboseIter = FALSE,allowParallel = TRUE)
+fit<-train(classe~.,data=training,method="gbm", trControl=ctrl,verbose=FALSE)
+confusionMatrix(testing$classe,predict(fit,testing))
+summary(fit)
+```
+
+Accuracy of 0.99 is best we can have.We do not need to use PCA 
+
+Let's predict variables from test set
+
+#Variables prediction
+
+```{r,message=FALSE,warning=FALSE,cache=TRUE}
+data.frame(x=pml.testing$X,prediction=predict(fit,pml.testing[,isnacolumn]))
+```
+
